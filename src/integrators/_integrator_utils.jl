@@ -111,3 +111,12 @@ function build_anticomms(
 
     return Symmetric(drive_anticomms), drift_anticomms
 end
+
+function compute_powers(G::AbstractMatrix{T}, order::Int) where T <: Number
+    powers = Array{typeof(G)}(undef, order)
+    powers[1] = G
+    for k = 2:order
+        powers[k] = powers[k-1] * G
+    end
+    return powers
+end

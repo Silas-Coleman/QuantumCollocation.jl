@@ -62,6 +62,7 @@ include("_integrator_utils.jl")
 include("derivative_integrator.jl")
 include("pade_integrators.jl")
 include("exponential_integrators.jl")
+include("chebyshev_integrators.jl")
 
 
 end

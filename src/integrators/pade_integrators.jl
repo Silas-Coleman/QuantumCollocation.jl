@@ -21,15 +21,6 @@ sixteenth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 16)
 eighteenth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 18)
 twentieth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 20)
 
-function compute_powers(G::AbstractMatrix{T}, order::Int) where T <: Number
-    powers = Array{typeof(G)}(undef, order)
-    powers[1] = G
-    for k = 2:order
-        powers[k] = powers[k-1] * G
-    end
-    return powers
-end
-
 # key is the order of the integrator
 # and the value are the Pade coefficients
 # for each term
