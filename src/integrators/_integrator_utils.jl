@@ -120,3 +120,11 @@ function compute_powers(G::AbstractMatrix{T}, order::Int) where T <: Number
     end
     return powers
 end
+
+function get_comps(QI::QuantumIntegrator, traj::NamedTrajectory)
+    if QI.freetime
+        return QI.unitary_components, QI.drive_components, traj.components[traj.timestep]
+    else
+        return QI.unitary_components, QI.drive_components
+    end
+end

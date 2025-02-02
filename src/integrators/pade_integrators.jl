@@ -303,14 +303,6 @@ struct UnitaryPadeIntegrator <: QuantumPadeIntegrator
     end
 end
 
-function get_comps(P::UnitaryPadeIntegrator, traj::NamedTrajectory)
-    if P.freetime
-        return P.unitary_components, P.drive_components, traj.components[traj.timestep]
-    else
-        return P.unitary_components, P.drive_components
-    end
-end
-
 function (integrator::UnitaryPadeIntegrator)(
     sys::AbstractQuantumSystem,
     traj::NamedTrajectory;
