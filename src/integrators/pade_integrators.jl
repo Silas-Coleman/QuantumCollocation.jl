@@ -10,7 +10,6 @@ function nth_order_pade(Gₜ::Matrix, n::Int)
 end
 
 
-
 fourth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 4)
 sixth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 6)
 eighth_order_pade(Gₜ::Matrix) = nth_order_pade(Gₜ, 8)
