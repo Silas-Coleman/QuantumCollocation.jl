@@ -172,3 +172,121 @@ function nth_order_chebyshev(
 
     return Ũ⃗ₜ₊₁ - (I_N ⊗ C) * Ũ⃗ₜ
 end
+
+# ----------------------------------------------------------------
+#               Quantum State Chebyshev Integrator
+# ----------------------------------------------------------------
+
+struct QuantumStateChebyshevIntegrator <: QuantumChebyshevIntegrator
+    state_components::Vector{Int},
+    drive_components::Vector{Int},
+    timestep::Union{Real,Int},
+    freetime::Bool,
+    n_drives::Int,
+    ketdim::Int,
+    dim::Int,
+    zdim::Int,
+    order::Int,
+    autodiff::Bool,
+    G::Function,
+    ∂G::Function
+
+    function QuantumStateChebyshevIntegrator(
+        sys::AbstractQuantumSystem,
+        state_name::Symbol,
+        drive_name::Union{Symbol,Tuple{Vararg{Symbol}}},
+        traj::NamedTrajectory;
+        order::Int=4,
+        G::Function=a -> G_bilinear(a,sys.G_drift,sys.G_drives),
+        ∂G::Function=a ->sys.G_drives,
+        autodiff::Bool=false,
+    )
+        @assert 0<order<=20
+
+        ketdim = size(sys.H_drift, 1)
+        dim = 2ketdim
+
+        state_components = traj.components[state_name]
+
+        if drive_name isa Tuple
+            drive_components = vcat((traj.components[s] for s ∈ drive_name)...)
+        else
+            drive_components = traj.components[drive_name]
+        end
+
+        n_drives = length(drive_components)
+
+        @assert all(diff(drive_components) .== 1) "controls must be in order"
+
+        freetime = traj.timestep isa Symbol
+        
+        if freetime
+            timesep = traj.compoents[traj.timestep][1]
+        else
+            timestep = traj.stimestep
+        end
+
+        return new(
+            state_components,
+            drive_components,
+            timestep,
+            freetime,
+            n_drives,
+            ketdim,
+            dim,
+            traj.dim,
+            order,
+            autodiff,
+            G,
+            ∂G
+        )
+    end
+end
+
+function get_comps(QSCI::QuantumStateChebyshevIntegrator, traj::NamedTrajectory)
+    if QSCI.freetime
+        return QSCI.state_components, QSCI.drive_components, traj.compoents
+    else
+        return QSCI.state_components, QSCI.drive_components
+    end
+end
+
+function (integrator::QuantumStateChebyshevIntegrator)(
+    sys::AbstractQuantumSystem,
+    traj::NamedTrajectory;
+    state_name::Union{Symbol, Nothing}=nothing,
+    drive_name::Union{Symbol, Thyple{Vararg{Symbol}}, Nothing}=nothing,
+    order::Int=integrator.order,
+    G::Function=integrator.G,
+    ∂G::Function=integrator.∂G,
+    autodiff::Bool=integrator.autodiff
+)
+    @assert !isnothing(state_name)
+    @assert !isnothing(drive_name)
+    return QuantumStateChebyshevIntegrator(
+        sys,
+        state_name,
+        drive_name,
+        traj;
+        order=order,
+        G=G,
+        ∂G=∂G,
+        autodiff=autodiff
+    )
+end
+
+# ------------------- Integrator -------------------
+
+function nth_order_chebyshev(
+    QSCI::QuantumStateChebyshevIntegrator,
+    ψ̃ₜ₊₁::AbstractVector,
+    ψ̃ₜ::AbstractVector,
+    aₜ::AbstractVector,
+    Δt::Real
+)
+    Gₜ = QSCI.G(aₜ)
+
+    C = chebyshev_operator(Gₜ,QSCI.order,Δt)
+
+    return ψ̃ₜ₊₁ - C * ψ̃ₜ
+end
