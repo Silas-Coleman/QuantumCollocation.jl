@@ -19,6 +19,7 @@ function nth_order_chebyshev(Gₜ::Matrix, n::Int)
 end
 
 const CHEBYSHEV_COEFFICIENTS = OrderedDict{Int,Vector{Float64}}(
+    # Each array consists of the sum of coefficients for Tᵢ up to n where each coefficient is ∫eˣ*Tᵢdx from -1 to 1
     0 => [1.266065877752008406176287280687,],
     1 => [1.266065877752008406176287280687,1.130318207984970069190922004054,],
     2 => [0.994570538217931843227859189938,1.130318207984970069190922004054,0.542990679068153125896856181498,],
@@ -53,7 +54,7 @@ function compute_powers_with_identity(G::AbstractMatrix{T}, order::Int) where T 
 end
 
 function chebyshev_operator(
-    G_powers::Vector{<:Abstract},
+    G_powers::Vector{<:AbstractMatrix},
     coeffs::Vector{<:Real}
 )
     return sum(coeffs .* G_powers)
@@ -65,6 +66,14 @@ function chebyshev_coefficients(Δt::Real,n::Int)
     return coefficients
 end
 
+function chebyshev_operator(
+    G_powers::Vector{<:AbstractMatrix},
+    n::Int,
+    Δt::Int
+)
+    chebyshev_coefficients = chebyshev_coefficients(Δt,n)
+    return chebyshev_operator(G_powers,chebyshev_coefficients)
+end
 
 
 # ----------------------------------------------------------------
@@ -157,7 +166,7 @@ function nth_order_chebyshev(
 )
     Gₜ = QCI.G(aₜ)
 
-    C = chebyshev_operators(Gₜ,QCI.order,Δt)
+    C = chebyshev_operator(Gₜ,QCI.order,Δt)
 
     I_N = sparse(I)
 
