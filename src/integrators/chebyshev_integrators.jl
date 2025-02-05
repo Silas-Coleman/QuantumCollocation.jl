@@ -60,18 +60,23 @@ function chebyshev_operator(
     return sum(coeffs .* G_powers)
 end
 
-function chebyshev_coefficients(Δt::Real,n::Int)
-    # timestep derivative?
-    coefficients = CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (0:n)))
-    return coefficients
+function chebyshev_coefficients(Δt::Real,n::Int;timestep_derivative=false)
+    if !timestep_derivative
+        return CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (0:n)))
+    else
+        coeffs = CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (-1:n-1))) .* (1:n)
+        coeffs[1] *= 0
+        return coeffs
+    end
 end
 
 function chebyshev_operator(
     G_powers::Vector{<:AbstractMatrix},
     n::Int,
-    Δt::Int
+    Δt::Int,
+    timestep_derivative=false
 )
-    chebyshev_coefficients = chebyshev_coefficients(Δt,n)
+    chebyshev_coefficients = chebyshev_coefficients(Δt,n;timestep_derivative)
     return chebyshev_operator(G_powers,chebyshev_coefficients)
 end
 
@@ -173,22 +178,64 @@ function nth_order_chebyshev(
     return Ũ⃗ₜ₊₁ - (I_N ⊗ C) * Ũ⃗ₜ
 end
 
+@views function(UCI::UnitaryChebyshevIntegrator)(
+    zₜ::AbstractVector,
+    zₜ₊₁::AbstractVector,
+    t::Int
+) # Go to _integrator_utils?
+
+    Ũ⃗ₜ₊₁ = zₜ₊₁[UCI.unitary_components]
+    Ũ⃗ₜ = zₜ[UCI.unitary_components]
+    aₜ = zₜ[UCI.drive_components]
+
+    if UCI.freetime
+        Δtₜ = zₜ[UCI.timestep]
+    else
+        Δtₜ = UCI.timestep
+    end
+    
+    return nth_order_chebyshev(UCI, Ũ⃗ₜ₊₁, Ũ⃗ₜ, aₜ, Δtₜ)
+end
+
+# ------------------- Jacobians -------------------
+
+function ∂aₜ(
+    UCI::UnitaryChebyshevIntegrator,
+    G_powers::Vector{<:AbstractMatrix},
+) # TODO
+end
+
+function ∂Δtₜ(
+    UCI::UnitaryChebyshevIntegrator,
+    Gₜ_powers::Vector{<:AbstractMatrix},
+    Ũ⃗ₜ₊₁::AbstractVector,
+    Ũ⃗ₜ::AbstractVector,
+    Δtₜ::Real
+)
+    coeffs = chebyshev_coefficients(Δtₜ,UCI.order;timestep_derivative=true)
+    ∂ΔtₜC=sum(coeffs .* Gₜ_powers)
+
+    I_N = sparse(I, UCI.ketdim, UCI.ketdim)
+
+    return Ũ⃗ₜ₊₁ - (I_N ⊗ ∂ΔtₜC) * U⃗̃ₜ
+end
+
 # ----------------------------------------------------------------
 #               Quantum State Chebyshev Integrator
 # ----------------------------------------------------------------
 
 struct QuantumStateChebyshevIntegrator <: QuantumChebyshevIntegrator
-    state_components::Vector{Int},
-    drive_components::Vector{Int},
-    timestep::Union{Real,Int},
-    freetime::Bool,
-    n_drives::Int,
-    ketdim::Int,
-    dim::Int,
-    zdim::Int,
-    order::Int,
-    autodiff::Bool,
-    G::Function,
+    state_components::Vector{Int}
+    drive_components::Vector{Int}
+    timestep::Union{Real,Int}
+    freetime::Bool
+    n_drives::Int
+    ketdim::Int
+    dim::Int
+    zdim::Int
+    order::Int
+    autodiff::Bool
+    G::Function
     ∂G::Function
 
     function QuantumStateChebyshevIntegrator(
@@ -255,7 +302,7 @@ function (integrator::QuantumStateChebyshevIntegrator)(
     sys::AbstractQuantumSystem,
     traj::NamedTrajectory;
     state_name::Union{Symbol, Nothing}=nothing,
-    drive_name::Union{Symbol, Thyple{Vararg{Symbol}}, Nothing}=nothing,
+    drive_name::Union{Symbol, Tuple{Vararg{Symbol}}, Nothing}=nothing,
     order::Int=integrator.order,
     G::Function=integrator.G,
     ∂G::Function=integrator.∂G,
@@ -289,4 +336,34 @@ function nth_order_chebyshev(
     C = chebyshev_operator(Gₜ,QSCI.order,Δt)
 
     return ψ̃ₜ₊₁ - C * ψ̃ₜ
+end
+
+@views function(QSCI::QuantumStateChebyshevIntegrator)(
+    zₜ::AbstractVector,
+    zₜ₊₁::AbstractVector,
+    t::Int
+)
+    ψ̃ₜ₊₁ = zₜ₊₁[QSCI.state_components]
+    ψ̃ₜ = zₜ[QSCI.state_components]
+    aₜ = zₜ[QSCI.drive_components]
+
+    if QSCI.freetime
+        Δtₜ = zₜ[QSCI.timestep]
+    else
+        Δtₜ = QSCI.timestep
+    end
+    return nth_order_chebyshev(QSCI, ψ̃ₜ₊₁, ψ̃ₜ, aₜ, Δtₜ)
+end
+
+function ∂Δtₜ(
+    QSCI::QuantumStateChebyshevIntegrator,
+    Gₜ_powers::Vector{<:AbstractMatrix},
+    ψ̃ₜ₊₁::AbstractVector,
+    ψ̃ₜ::AbstractVector,
+    Δtₜ::Real
+)
+    coeffs = chebyshev_coefficients(Δtₜ, QSCI.order; timestep_derivative=true)
+    ∂ΔtₜC = sum(coeffs .* Gₜ_powers)
+
+    return ψ̃ₜ₊₁ - ∂ΔtₜC * ψ̃ₜ
 end
