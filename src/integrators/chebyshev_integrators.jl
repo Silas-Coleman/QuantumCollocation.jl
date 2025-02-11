@@ -80,6 +80,32 @@ function chebyshev_operator(
     return chebyshev_operator(G_powers,chebyshev_coefficients)
 end
 
+@views function ∂aʲC(
+    QI::QuantumIntegrator,
+    G_powers::Vetor{<:AbstractMatrix},
+    Δt::Real,
+    ∂G_∂aʲ::AbstractMatrix
+)
+    C_coeffs = chebyshev_coefficients(Δt, QI.order)
+    ∂C_∂aʲ = zeros(size(G_powers[1]))
+    n = length(G_powers)
+    for p = 2:n
+        if p == 2
+            ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ
+        else
+            for k = 1:p
+                if k == 1
+                    ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ * G_powers[p-1]
+                elseif k == p
+                    ∂C_∂aʲ += C_coeffs[p] * G_powers[p] * ∂G_∂aʲ
+                else
+                    ∂C_∂aʲ += C_coeffs[p] * G_powers[k-1] * ∂G_∂aʲ * G_powers[p-k]
+                end
+            end
+        end
+    end
+    return ∂C_∂aʲ
+end
 
 # ----------------------------------------------------------------
 #                    Quantum Chebyshev Integrator
