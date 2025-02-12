@@ -82,7 +82,7 @@ end
 
 @views function ∂aʲC(
     QI::QuantumIntegrator,
-    G_powers::Vetor{<:AbstractMatrix},
+    G_powers::Vector{<:AbstractMatrix},
     Δt::Real,
     ∂G_∂aʲ::AbstractMatrix
 )
