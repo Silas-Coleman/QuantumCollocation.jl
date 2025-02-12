@@ -228,7 +228,24 @@ end
 function ∂aₜ(
     UCI::UnitaryChebyshevIntegrator,
     G_powers::Vector{<:AbstractMatrix},
-) # TODO
+    Ũ⃗ₜ₊₁::AbstractVector,
+    Ũ⃗ₜ::AbstractVector,
+    aₜ::AbstractVector,
+    Δtₜ::Real
+)
+    ∂aC = zeros(eltype(Ũ⃗ₜ), UCI.dim, UCI.n_drives)
+
+    ∂G_∂aₜ = UCI.∂G(aₜ)
+
+    I_N = sparse(I, UCI.ketdim, UCI.ketdim)
+
+    for j = 1:UCI.n_drives
+
+        ∂aₜʲC = ∂aʲC(UCI, G_powers, Δtₜ, ∂G_∂aₜ[j])
+
+        ∂aC[:,j] = Ũ⃗ₜ₊₁ - (I_N ⊗ ∂aₜʲC) * Ũ⃗ₜ
+    end
+    return ∂aC
 end
 
 function ∂Δtₜ(
@@ -243,8 +260,46 @@ function ∂Δtₜ(
 
     I_N = sparse(I, UCI.ketdim, UCI.ketdim)
 
-    return Ũ⃗ₜ₊₁ - (I_N ⊗ ∂ΔtₜC) * U⃗̃ₜ
+    return Ũ⃗ₜ₊₁ - (I_N ⊗ ∂ΔtₜC) * Ũ⃗ₜ
 end
+
+@views function jacobian(
+    UCI::UnitaryChebyshevIntegrator,
+    zₜ::AbstractVector,
+    zₜ₊₁::AbstractVector
+)
+     # obtain state and control vectors
+     Ũ⃗ₜ₊₁ = zₜ₊₁[UCI.unitary_components]
+     Ũ⃗ₜ = zₜ[UCI.unitary_components]
+     aₜ = zₜ[UCI.drive_components]
+ 
+     Gₜ = UCI.G(aₜ)
+ 
+     # obtain timestep
+     if UCI.freetime
+         Δtₜ = zₜ[UCI.timestep]
+     else
+         Δtₜ = UCI.timestep
+     end
+ 
+     Gₜ_powers = compute_powers(Gₜ, UCI.order)
+ 
+     ∂aₜC = ∂aₜ(UCI, Gₜ_powers, Ũ⃗ₜ₊₁, Ũ⃗ₜ, aₜ, Δtₜ)
+ 
+     Id = sparse(I, UCI.ketdim, UCI.ketdim)
+ 
+     Cₜ = chebyshev_operator(Gₜ_powers,UCI.order,Δtₜ)
+ 
+     ∂Ũ⃗ₜC = -Id ⊗ Cₜ
+ 
+     if UCI.freetime
+         ∂ΔtₜC = ∂Δtₜ(UCI, Gₜ_powers, Ũ⃗ₜ₊₁, Ũ⃗ₜ, Δtₜ)
+         return ∂Ũ⃗ₜC, ∂Ũ⃗ₜ₊₁C, ∂aₜC, ∂ΔtₜC
+     else
+         return ∂Ũ⃗ₜC, ∂Ũ⃗ₜ₊₁C, ∂aₜC
+     end
+ end
+
 
 # ----------------------------------------------------------------
 #               Quantum State Chebyshev Integrator
@@ -381,6 +436,28 @@ end
     return nth_order_chebyshev(QSCI, ψ̃ₜ₊₁, ψ̃ₜ, aₜ, Δtₜ)
 end
 
+function ∂aₜ(
+    QSCI::QuantumStateChebyshevIntegrator,
+    G_powers::Vector{<:AbstractMatrix},
+    ψ̃ₜ₊₁::AbstractVector,
+    ψ̃ₜ::AbstractVector,
+    aₜ::AbstractVector,
+    Δtₜ::Real
+)
+    ∂aC = zeros(eltype(ψ̃ₜ), QSCI.dim, QSCI.n_drives)
+
+    ∂G_∂aₜ = QSCI.∂G(aₜ)
+
+    for j = 1:QSCI.n_drives
+
+        ∂aₜʲC = ∂aʲF(QSCI, G_powers, Δtₜ, ∂G_∂aₜ[j])
+
+        ∂aC[:, j] = ψ̃ₜ₊₁ - ∂aₜʲC * ψ̃ₜ
+    end
+
+    return ∂aC
+end
+
 function ∂Δtₜ(
     QSCI::QuantumStateChebyshevIntegrator,
     Gₜ_powers::Vector{<:AbstractMatrix},
@@ -392,4 +469,41 @@ function ∂Δtₜ(
     ∂ΔtₜC = sum(coeffs .* Gₜ_powers)
 
     return ψ̃ₜ₊₁ - ∂ΔtₜC * ψ̃ₜ
+end
+
+@views function jacobian(
+    QSCI::QuantumStateChebyshevIntegrator,
+    zₜ::AbstractVector,
+    zₜ₊₁::AbstractVector,
+    t::Int
+)
+    # obtain state and control vectors
+    ψ̃ₜ₊₁ = zₜ₊₁[QSCI.state_components]
+    ψ̃ₜ = zₜ[QSCI.state_components]
+    aₜ = zₜ[QSCI.drive_components]
+
+    Gₜ = QSCI.G(aₜ)
+
+    # obtain timestep
+    if QSCI.freetime
+        Δtₜ = zₜ[QSCI.timestep]
+    else
+        Δtₜ = QSCI.timestep
+    end
+
+    Gₜ_powers = compute_powers(Gₜ, UCI.order)
+ 
+    ∂aₜC = ∂aₜ(QSCI, Gₜ_powers, ψ̃ₜ₊₁, ψ̃ₜ, aₜ, Δtₜ)
+ 
+     Cₜ = chebyshev_operator(Gₜ_powers,UCI.order,Δtₜ)
+ 
+     ∂ψ̃ₜC = -Cₜ
+     ∂ψ̃ₜ₊₁C = sparse(I, QSCI.ketdim, QSCI.ketdim)
+
+    if QSCI.freetime
+        ∂ΔtₜC = ∂Δtₜ(QSCI, Gₜ_powers, ψ̃ₜ₊₁, ψ̃ₜ, Δtₜ)
+        return ∂ψ̃ₜC, ∂ψ̃ₜ₊₁C, ∂aₜC, ∂ΔtₜC
+    else
+        return ∂ψ̃ₜC, ∂ψ̃ₜ₊₁C, ∂aₜC
+    end
 end
