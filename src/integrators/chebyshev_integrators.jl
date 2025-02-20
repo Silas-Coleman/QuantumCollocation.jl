@@ -12,7 +12,7 @@ function nth_order_chebyshev(Gₜ::Matrix, n::Int)
     
     Returns: nth order chebyshev approximation of the exponential of Gₜ
     """
-    @assert n > 0
+    @assert n > 3
     Gₜ_powers = compute_powers_with_identity(Gₜ,n)
     C = sum(CHEBYSHEV_COEFFICIENTS[n] .* Gₜ_powers)
     return C
@@ -47,8 +47,8 @@ function compute_powers_with_identity(G::AbstractMatrix{T}, order::Int) where T 
     powers = Array{typeof(G)}(undef, order+1)
     powers[1] = G^0
     powers[2] = G
-    for k = 2:order
-        powers[k+1] = powers[k] * G
+    for k = 3:order+1
+        powers[k] = powers[k-1] * G
     end
     return powers
 end
@@ -64,8 +64,8 @@ function chebyshev_coefficients(Δt::Real,n::Int;timestep_derivative=false)
     if !timestep_derivative
         return CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (0:n)))
     else
-        coeffs = CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (-1:n-1))) .* (0:n)
-        coeffs[1] *= 0
+        coeffs = CHEBYSHEV_COEFFICIENTS[n][2:n+1] .* ((Δt .^ (0:n-1))) .* (1:n)
+        prepend!(coeffs,0.0)
         return coeffs
     end
 end
@@ -78,6 +78,16 @@ function chebyshev_operator(
 )
     coeffs = chebyshev_coefficients(Δt,n;timestep_derivative)
     return chebyshev_operator(G_powers,coeffs)
+end
+
+function chebyshev_operator(
+    G::AbstractMatrix,
+    n::Int,
+    Δt::Real;
+    timestep_derivative=false
+)
+    G_powers = compute_powers_with_identity(G,n)
+    return chebyshev_operator(G_powers,n,Δt;timestep_derivative)
 end
 
 @views function ∂aʲC(
@@ -94,11 +104,11 @@ end
         if p == 2
             ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ
         else
-            for k = 1:p
-                if k == 1
+            for k = 2:p
+                if k == 2
                     ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ * G_powers[p-1]
                 elseif k == p
-                    ∂C_∂aʲ += C_coeffs[p] * G_powers[p] * ∂G_∂aʲ
+                    ∂C_∂aʲ += C_coeffs[p] * G_powers[p-1] * ∂G_∂aʲ
                 else
                     ∂C_∂aʲ += C_coeffs[p] * G_powers[k-1] * ∂G_∂aʲ * G_powers[p-k]
                 end
@@ -198,9 +208,7 @@ function nth_order_chebyshev(
 )
     Gₜ = QCI.G(aₜ)
     C = chebyshev_operator(compute_powers_with_identity(Gₜ,QCI.order),QCI.order,Δt)
-
     I_N = sparse(I, QCI.ketdim, QCI.ketdim)
-
     return Ũ⃗ₜ₊₁ - (I_N ⊗ C) * Ũ⃗ₜ
 end
 
@@ -351,7 +359,7 @@ struct QuantumStateChebyshevIntegrator <: QuantumChebyshevIntegrator
         freetime = traj.timestep isa Symbol
         
         if freetime
-            timesep = traj.compoents[traj.timestep][1]
+            timestep = traj.compoents[traj.timestep][1]
         else
             timestep = traj.stimestep
         end
