@@ -161,8 +161,13 @@ function UnitarySmoothPulseProblem(
     elseif piccolo_options.integrator == :exponential
         unitary_integrator =
             UnitaryExponentialIntegrator(system, state_name, control_name, traj)
+    elseif piccolo_options.integrator == :chebyshev
+        unitary_integrator = UnitaryChebyshevIntegrator(
+            system, state_name, control_name, traj;
+            order = piccolo_options.chebyshev_order
+        )
     else
-        error("integrator must be one of (:pade, :exponential)")
+        error("integrator must be one of (:pade, :exponential, :chebyshev)")
     end
 
     integrators = [

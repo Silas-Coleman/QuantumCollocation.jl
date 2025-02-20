@@ -88,6 +88,7 @@ Options for the Piccolo quantum optimal control library.
     timesteps_all_equal::Bool = true
     integrator::Symbol = :pade
     pade_order::Int = 4
+    chebyshev_order::Int = 10
     jacobian_structure::Bool = integrator == :pade
     rollout_integrator::Function = expv
     eval_hessian::Bool = false

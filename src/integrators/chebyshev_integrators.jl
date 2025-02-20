@@ -64,7 +64,7 @@ function chebyshev_coefficients(Δt::Real,n::Int;timestep_derivative=false)
     if !timestep_derivative
         return CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (0:n)))
     else
-        coeffs = CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (-1:n-1))) .* (1:n)
+        coeffs = CHEBYSHEV_COEFFICIENTS[n] .* ((Δt .^ (-1:n-1))) .* (0:n)
         coeffs[1] *= 0
         return coeffs
     end
@@ -73,11 +73,11 @@ end
 function chebyshev_operator(
     G_powers::Vector{<:AbstractMatrix},
     n::Int,
-    Δt::Int,
+    Δt::Real,
     timestep_derivative=false
 )
-    chebyshev_coefficients = chebyshev_coefficients(Δt,n;timestep_derivative)
-    return chebyshev_operator(G_powers,chebyshev_coefficients)
+    coeffs = chebyshev_coefficients(Δt,n;timestep_derivative)
+    return chebyshev_operator(G_powers,coeffs)
 end
 
 @views function ∂aʲC(
@@ -88,6 +88,7 @@ end
 )
     C_coeffs = chebyshev_coefficients(Δt, QI.order)
     ∂C_∂aʲ = zeros(size(G_powers[1]))
+
     n = length(G_powers)
     for p = 2:n
         if p == 2
@@ -122,7 +123,7 @@ abstract type QuantumChebyshevIntegrator <: QuantumIntegrator end
 # ----------------------------------------------------------------
 
 struct UnitaryChebyshevIntegrator <: QuantumChebyshevIntegrator
-    unitary_component::Vector{Int}
+    unitary_components::Vector{Int}
     drive_components::Vector{Int}
     timestep::Union{Real, Int} # either the timestep or the index of the timestep
     freetime::Bool
@@ -196,10 +197,9 @@ function nth_order_chebyshev(
     Δt::Real
 )
     Gₜ = QCI.G(aₜ)
+    C = chebyshev_operator(compute_powers_with_identity(Gₜ,QCI.order),QCI.order,Δt)
 
-    C = chebyshev_operator(Gₜ,QCI.order,Δt)
-
-    I_N = sparse(I)
+    I_N = sparse(I, QCI.ketdim, QCI.ketdim)
 
     return Ũ⃗ₜ₊₁ - (I_N ⊗ C) * Ũ⃗ₜ
 end
@@ -266,7 +266,8 @@ end
 @views function jacobian(
     UCI::UnitaryChebyshevIntegrator,
     zₜ::AbstractVector,
-    zₜ₊₁::AbstractVector
+    zₜ₊₁::AbstractVector,
+    t::Int
 )
      # obtain state and control vectors
      Ũ⃗ₜ₊₁ = zₜ₊₁[UCI.unitary_components]
@@ -282,7 +283,7 @@ end
          Δtₜ = UCI.timestep
      end
  
-     Gₜ_powers = compute_powers(Gₜ, UCI.order)
+     Gₜ_powers = compute_powers_with_identity(Gₜ, UCI.order)
  
      ∂aₜC = ∂aₜ(UCI, Gₜ_powers, Ũ⃗ₜ₊₁, Ũ⃗ₜ, aₜ, Δtₜ)
  
@@ -291,6 +292,7 @@ end
      Cₜ = chebyshev_operator(Gₜ_powers,UCI.order,Δtₜ)
  
      ∂Ũ⃗ₜC = -Id ⊗ Cₜ
+     ∂Ũ⃗ₜ₊₁C = sparse(1.0I(UCI.dim))
  
      if UCI.freetime
          ∂ΔtₜC = ∂Δtₜ(UCI, Gₜ_powers, Ũ⃗ₜ₊₁, Ũ⃗ₜ, Δtₜ)
@@ -414,7 +416,7 @@ function nth_order_chebyshev(
 )
     Gₜ = QSCI.G(aₜ)
 
-    C = chebyshev_operator(Gₜ,QSCI.order,Δt)
+    C = chebyshev_operator(compute_powers_with_identity(Gₜ,QCI.order),QSCI.order,Δt)
 
     return ψ̃ₜ₊₁ - C * ψ̃ₜ
 end
@@ -491,14 +493,14 @@ end
         Δtₜ = QSCI.timestep
     end
 
-    Gₜ_powers = compute_powers(Gₜ, UCI.order)
+    Gₜ_powers = compute_powers_with_identity(Gₜ, UCI.order)
  
     ∂aₜC = ∂aₜ(QSCI, Gₜ_powers, ψ̃ₜ₊₁, ψ̃ₜ, aₜ, Δtₜ)
  
      Cₜ = chebyshev_operator(Gₜ_powers,UCI.order,Δtₜ)
  
      ∂ψ̃ₜC = -Cₜ
-     ∂ψ̃ₜ₊₁C = sparse(I, QSCI.ketdim, QSCI.ketdim)
+     ∂ψ̃ₜ₊₁C = sparse(1.0I(QSCI.dim))
 
     if QSCI.freetime
         ∂ΔtₜC = ∂Δtₜ(QSCI, Gₜ_powers, ψ̃ₜ₊₁, ψ̃ₜ, Δtₜ)
