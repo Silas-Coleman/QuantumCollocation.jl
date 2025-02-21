@@ -98,21 +98,10 @@ end
 )
     C_coeffs = chebyshev_coefficients(Δt, QI.order)
     ∂C_∂aʲ = zeros(size(G_powers[1]))
-
     n = length(G_powers)
     for p = 2:n
-        if p == 2
-            ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ
-        else
-            for k = 2:p
-                if k == 2
-                    ∂C_∂aʲ += C_coeffs[p] * ∂G_∂aʲ * G_powers[p-1]
-                elseif k == p
-                    ∂C_∂aʲ += C_coeffs[p] * G_powers[p-1] * ∂G_∂aʲ
-                else
-                    ∂C_∂aʲ += C_coeffs[p] * G_powers[k-1] * ∂G_∂aʲ * G_powers[p-k]
-                end
-            end
+        for k = 2:p
+            ∂C_∂aʲ += C_coeffs[p] * G_powers[k-1] * ∂G_∂aʲ * G_powers[p-k+1]
         end
     end
     return ∂C_∂aʲ
@@ -216,7 +205,7 @@ end
     zₜ::AbstractVector,
     zₜ₊₁::AbstractVector,
     t::Int
-) # Go to _integrator_utils?
+)
 
     Ũ⃗ₜ₊₁ = zₜ₊₁[UCI.unitary_components]
     Ũ⃗ₜ = zₜ[UCI.unitary_components]
@@ -251,7 +240,7 @@ function ∂aₜ(
 
         ∂aₜʲC = ∂aʲC(UCI, G_powers, Δtₜ, ∂G_∂aₜ[j])
 
-        ∂aC[:,j] = Ũ⃗ₜ₊₁ - (I_N ⊗ ∂aₜʲC) * Ũ⃗ₜ
+        ∂aC[:,j] = -(I_N ⊗ ∂aₜʲC) * Ũ⃗ₜ
     end
     return ∂aC
 end
@@ -268,7 +257,7 @@ function ∂Δtₜ(
 
     I_N = sparse(I, UCI.ketdim, UCI.ketdim)
 
-    return Ũ⃗ₜ₊₁ - (I_N ⊗ ∂ΔtₜC) * Ũ⃗ₜ
+    return -(I_N ⊗ ∂ΔtₜC) * Ũ⃗ₜ
 end
 
 @views function jacobian(
@@ -462,7 +451,7 @@ function ∂aₜ(
 
         ∂aₜʲC = ∂aʲF(QSCI, G_powers, Δtₜ, ∂G_∂aₜ[j])
 
-        ∂aC[:, j] = ψ̃ₜ₊₁ - ∂aₜʲC * ψ̃ₜ
+        ∂aC[:, j] = -∂aₜʲC * ψ̃ₜ
     end
 
     return ∂aC
@@ -478,7 +467,7 @@ function ∂Δtₜ(
     coeffs = chebyshev_coefficients(Δtₜ, QSCI.order; timestep_derivative=true)
     ∂ΔtₜC = sum(coeffs .* Gₜ_powers)
 
-    return ψ̃ₜ₊₁ - ∂ΔtₜC * ψ̃ₜ
+    return -∂ΔtₜC * ψ̃ₜ
 end
 
 @views function jacobian(
