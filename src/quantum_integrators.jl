@@ -82,3 +82,40 @@ end
 
 
 end
+
+# ----------------------------------------------------------------------------- #
+# Time Dependent Integrators
+# ----------------------------------------------------------------------------- #
+
+function TimeDependentKetIntegrator(
+    sys::TimeDependentQuantumSystem,
+    traj::NamedTrajectory, 
+    ψ̃::Symbol, 
+    a::Symbol,
+    t::Symbol
+) 
+    return TimeDependentBilinearIntegrator(sys.G, traj, ψ̃, a, t)
+end
+
+function TimeDependentUnitaryIntegrator(
+    sys::TimeDependentQuantumSystem,
+    traj::NamedTrajectory, 
+    Ũ⃗::Symbol, 
+    a::Symbol,
+    t::Symbol
+) 
+    Ĝ = a_, t_ -> I(sys.levels) ⊗ sys.G(a_,t_)
+    return TimeDependentBilinearIntegrator(Ĝ, traj, Ũ⃗, a, t)
+end
+
+# TODO: Need New QuantumSystem to make this work.
+
+# function TimeDependentDensityMatrixIntegrator(
+#     sys::TimeDependentQuantumSystem,
+#     traj::NamedTrajectory, 
+#     ρ̃::Symbol, 
+#     a::Symbol,
+#     t::Symbol
+# ) 
+#     return TimeDependentBilinearIntegrator(sys.𝒢, traj, ρ̃, a, t)
+# end
