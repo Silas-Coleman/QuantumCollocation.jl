@@ -4,6 +4,8 @@ export KetIntegrator
 export UnitaryIntegrator
 export DensityMatrixIntegrator
 export VariationalUnitaryIntegrator
+export TimeDependentKetIntegrator
+export TimeDependentUnitaryIntegrator
 
 using LinearAlgebra
 using NamedTrajectories
@@ -104,7 +106,7 @@ function TimeDependentUnitaryIntegrator(
     a::Symbol,
     t::Symbol
 ) 
-    Ĝ = a_, t_ -> I(sys.levels) ⊗ sys.G(a_,t_)
+    Ĝ = (a_, t_) -> I(sys.levels) ⊗ sys.G(a_,t_)
     return TimeDependentBilinearIntegrator(Ĝ, traj, Ũ⃗, a, t)
 end
 

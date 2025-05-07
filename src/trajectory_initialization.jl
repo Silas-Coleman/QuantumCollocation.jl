@@ -266,6 +266,10 @@ function initialize_trajectory(
     control_name=:a,
     n_control_derivatives::Int=length(control_bounds) - 1,
     zero_initial_and_final_derivative=false,
+    t_dependent::Bool=false,
+    time_name::Symbol=:t,
+    t::Union{Float64}=0.0,
+    t_bounds::ScalarBound=(0.5 * t, 1.5 * t),
     timestep_name=:Δt,
     Δt_bounds::ScalarBound=(0.5 * Δt, 1.5 * Δt),
     drive_derivative_σ::Float64=0.1,
@@ -334,6 +338,64 @@ function initialize_trajectory(
         bounds = merge(bounds, (; (state_names .=> state_bounds)...))
     end
 
+    # time_dependent
+    if t_dependent
+        if free_time
+            if t isa Real
+                t = fill(t, 1, T)
+            elseif t isa AbstractVector
+                t = reshape(t, 1, :)
+            else
+                @assert size(t) == (1,T) "t must be a Real, AbstractVector, or 1x$(T) AbstractMatrix"
+            end
+            time = time_name
+        else
+            @assert t isa Real "t must be a Real if free_time is false"
+        end
+        # TODO Change initialize_control_trajectory to accept t?
+        # Trajectory
+        if isnothing(a_guess)
+            # Randomly sample controls
+            a_values = initialize_control_trajectory(
+                n_drives,
+                n_control_derivatives,
+                T,
+                bounds[control_name],
+                drive_derivative_σ
+            )
+        else
+            # Use provided controls and take derivatives
+            a_values = initialize_control_trajectory(a_guess, Δt, n_control_derivatives)
+        end
+
+        names = [state_names..., control_names...]
+        values = [state_data..., a_values...]
+
+        if free_time
+            push!(names, time_name, timestep_name)
+            push!(values, t, Δt)
+            controls = (control_names[end], time_name, timestep_name)
+            bounds = merge(bounds, (; time_name => t_bounds,), (; timestep_name => Δt_bounds,))
+        else
+            controls = (control_names[end],)
+        end
+
+        # Construct global data for free phases
+        global_data = isnothing(phase_data) ? (;) : (; phase_name => phase_data)
+        return NamedTrajectory(
+            (; (names .=> values)...);
+            controls=controls,
+            time=time,
+            timestep=timestep,
+            bounds=bounds,
+            initial=initial,
+            final=final,
+            goal=goal,
+            global_data=global_data
+        )
+
+    end
+
     # Trajectory
     if isnothing(a_guess)
         # Randomly sample controls
@@ -389,12 +451,15 @@ function initialize_trajectory(
     state_name::Symbol=:Ũ⃗,
     U_init::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I(size(U_goal, 1))),
     a_guess::Union{AbstractMatrix{<:Float64}, Nothing}=nothing,
-    system::Union{AbstractQuantumSystem, Nothing}=nothing,
+    system::Union{AbstractTimeDependentQuantumSystem, AbstractQuantumSystem, Nothing}=nothing,
     rollout_integrator::Function=expv,
+    t_dependent::Bool=false,
+    t::Union{Float64}=0.0,
     geodesic=true,
     phase_operators::Union{AbstractVector{<:AbstractMatrix}, Nothing}=nothing,
     kwargs...
 )
+
     # Construct timesteps
     if Δt isa AbstractMatrix
         timesteps = vec(Δt)
@@ -423,8 +488,6 @@ function initialize_trajectory(
 
     # Construct phase data
     phase_data = isnothing(phase_operators) ? nothing : π * randn(length(phase_operators))
-
-    
     return initialize_trajectory(
         [Ũ⃗_traj],
         [Ũ⃗_init],
@@ -433,6 +496,8 @@ function initialize_trajectory(
         T,
         Δt,
         args...;
+        t_dependent=t_dependent,
+        t=t,
         phase_data=phase_data,
         a_guess=a_guess,
         kwargs...
@@ -446,6 +511,7 @@ end
 
 Trajectory initialization of quantum states.
 """
+# TODO Add time dependence
 function initialize_trajectory(
     ψ_goals::AbstractVector{<:AbstractVector{ComplexF64}},
     ψ_inits::AbstractVector{<:AbstractVector{ComplexF64}},
@@ -457,7 +523,7 @@ function initialize_trajectory(
         [state_name] :
         [Symbol(string(state_name) * "$i") for i = 1:length(ψ_goals)],
     a_guess::Union{AbstractMatrix{<:Float64}, Nothing}=nothing,
-    system::Union{AbstractQuantumSystem, Nothing}=nothing,
+    system::Union{AbstractQuantumSystem, AbstractTimeDependentQuantumSystem, Nothing}=nothing,
     rollout_integrator::Function=expv,
     kwargs...
 )
