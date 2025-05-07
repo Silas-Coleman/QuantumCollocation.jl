@@ -106,7 +106,8 @@ function TimeDependentUnitaryIntegrator(
     a::Symbol,
     t::Symbol
 ) 
-    Ĝ = (a_, t_) -> I(sys.levels) ⊗ sys.G(a_,t_)
+    id = fill(1,(sys.levels,sys.levels))
+    Ĝ = (a_,t_) -> kron(id, sys.G(a_,t_))
     return TimeDependentBilinearIntegrator(Ĝ, traj, Ũ⃗, a, t)
 end
 
